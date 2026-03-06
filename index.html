@@ -537,6 +537,10 @@ body::after {
 .theme-btn .theme-name{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;}
 
 /* ===== MOBILE RESPONSIVE ===== */
+/* Hidden by default — shown only inside media queries */
+#mobile-nav { display: none; }
+#mob-fab    { display: none; }
+
 /* ─── TABLET (≤768px) ─────────────────────────── */
 @media(max-width:768px){
   .header{padding:0 1rem;height:56px;}
@@ -828,10 +832,6 @@ body::after {
   .tab-search{border-radius:12px;margin-bottom:0.75rem;}
   .tab-search input{font-size:0.85rem;}
 }
-
-/* FAB hidden by default on desktop */
-#mob-fab{display:none;}
-#mobile-nav{display:none;}
 
 
 
@@ -3455,6 +3455,36 @@ function debounceTabSearch(type,val){
   },200);
 }
 
+let _globalSearchTimer=null;
+function debounceSearch(val){
+  clearTimeout(_globalSearchTimer);
+  _globalSearchTimer=setTimeout(()=>renderGlobalSearch(val),200);
+}
+
+function renderGlobalSearch(query){
+  const el=document.getElementById('global-search-results');
+  if(!el)return;
+  const q=(query||'').trim().toLowerCase();
+  if(!q){el.innerHTML='<div class="search-empty">Start typing to search everything in Lumi.</div>';return;}
+  const all=[...state.papers,...state.sessions].filter(x=>matchesSearch(x,q));
+  if(!all.length){el.innerHTML='<div class="search-empty">No results found for "'+q+'".</div>';return;}
+  el.innerHTML=all.map(item=>{
+    const ip=item.type==='paper';
+    const title=ip?item.title:(item.course+(item.topic?' — '+item.topic:''));
+    const color=ip?'var(--coral)':'var(--purple)';
+    const meta=ip?[item.authors,item.journal,item.year].filter(Boolean).join(' · '):[item.platform].filter(Boolean).join(' · ');
+    const chips=(item.domains||[]).map(d=>{const dom=state.domains.find(x=>x.name===d);return dom?`<span class="domain-chip" style="background:${dom.color}">${dom.emoji} ${d}</span>`:''}).join('');
+    return `<div class="item-card ${item.type}" onclick="showDetail(${item.id})" style="cursor:pointer;margin-bottom:0.6rem;">
+      <div class="item-tag ${item.type}">${ip?'Paper':'Session'}</div>
+      <div class="item-title">${title}</div>
+      ${ip&&item.abbrev?`<div style="display:inline-block;margin-top:0.15rem;font-size:0.68rem;font-weight:800;padding:0.1rem 0.5rem;border-radius:20px;background:rgba(255,77,141,0.10);color:#D63BAF;">${item.abbrev}</div>`:''}
+      ${meta?`<div class="item-meta">${meta}</div>`:''}
+      ${item.tldr?`<div class="item-tldr">${item.tldr.slice(0,100)}${item.tldr.length>100?'…':''}</div>`:''}
+      <div class="item-domains">${chips}</div>
+    </div>`;
+  }).join('');
+}
+
 // ===== SORT & REACTION FILTER =====
 let reactionFilter='all';
 function setReactionFilter(val,el){
@@ -3728,9 +3758,24 @@ function mobFabAction() {
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const t = tab.dataset.tab;
+    // Switch panels
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const panel = document.getElementById(`panel-${t}`);
+    if (panel) panel.classList.add('active');
+    // Sync mobile nav
     document.querySelectorAll('.mob-tab').forEach(b => b.classList.remove('active'));
     const mob = document.querySelector(`.mob-tab[data-tab="${t}"]`);
     if (mob) mob.classList.add('active');
+    // Tab-specific actions
+    if (t === 'papers') renderPapers();
+    if (t === 'courses') renderCourses();
+    if (t === 'reflections') renderReflections();
+    if (t === 'write') { if (!state.researchPapers) state.researchPapers = []; renderWriteSidebar(); }
+    if (t === 'search') setTimeout(() => { const el = document.getElementById('global-search'); if (el) el.focus(); }, 50);
+    updateMobFab(t);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 });
 ['paper-modal','session-modal','detail-modal','settings-modal','newpaper-modal','writesession-modal','linksources-modal'].forEach(id=>{
